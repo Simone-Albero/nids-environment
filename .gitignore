@@ -1,9 +1,5 @@
 # Custom skipped files
-datasets/
-logs/
-checkpoints/
-saves/
-plots/
+shared_data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

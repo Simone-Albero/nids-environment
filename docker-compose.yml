@@ -1,14 +1,18 @@
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.1
+    container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    networks:
+      - main-network
 
   kafka:
     image: confluentinc/cp-kafka:7.4.1
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:
@@ -16,37 +20,39 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - main-network
 
   producer:
     build:
       context: ./producer
-    container_name: producer_container
+    container_name: producer
     volumes:
       - ./shared_data:/src/shared
-    networks:
-      - app-network
     depends_on:
       - kafka
     ports:
       - "6000:6000"
+    networks:
+      - main-network
 
   temporal_classifier:
     build:
       context: ./classifiers/temporal_classifier
-    container_name: temporal_classifier_container
+    container_name: temporal_classifier
     volumes:
       - ./shared_data:/src/shared
-    networks:
-      - app-network
     depends_on:
       - kafka
     ports:
       - "5001:5001"
+    networks:
+      - main-network
 
 networks:
-  app-network:
+  main-network:
     driver: bridge
