@@ -14,10 +14,10 @@ from nids_framework.data import (
 )
 
 def get_preprocessed_df() -> pd.DataFrame:
-    CONFIG_PATH = "shared/dataset_properties.ini"
+    CONFIG_PATH = "shared/dataset/dataset_properties.ini"
     DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
-    DATASET_PATH = "shared/NF-ToN-IoT-V2-Test.csv"
-    TRAIN_META = "shared/train_meta.pkl"
+    DATASET_PATH = "shared/dataset/NF-ToN-IoT-V2-Test.csv"
+    TRAIN_META = "shared/dataset/train_meta.pkl"
     
     CATEGORICAL_LEV = 32
     BOUND = 100000000
@@ -67,23 +67,24 @@ def create_topic(topic_name: str, num_partitions: int, replication_factor: int):
     admin_client.close()
 
 def send_to_queue() -> None:
-    time.sleep(5)
-    X, y = get_preprocessed_df()
-
-    create_topic('queue', 1, 1)
-    create_topic('ground_truth', 1, 1)
+    time.sleep(10)
 
     producer = KafkaProducer(
         bootstrap_servers="kafka:9092",
-        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        value_serializer=lambda v: json.dumps(v).encode("utf-8")
     )
+
+    create_topic("queue", 1, 1)
+    create_topic("ground_truth", 1, 1)
+
+    X, y = get_preprocessed_df()
 
     try:
         for index, row in X.iterrows():
             producer.send("queue", value=row.to_dict())
             print(f"Message sent successfully to topic 'queue'")
 
-            message = {'true_label': str(y.iloc[index])}
+            message = {"true_label": str(y.iloc[index]), "index": str(index)}
             producer.send("ground_truth", value=message)
             print(f"Message sent successfully to topic 'ground_truth'")
 
