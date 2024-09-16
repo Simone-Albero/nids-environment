@@ -40,6 +40,19 @@ services:
     networks:
       - main-network
 
+  predictor:
+    build:
+      context: ./predictor
+    container_name: predictor
+    volumes:
+      - ./shared_data:/src/shared
+    depends_on:
+      - kafka
+    ports:
+      - "6001:6001"
+    networks:
+      - main-network
+
   temporal_classifier:
     build:
       context: ./classifiers/temporal_classifier

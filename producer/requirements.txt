@@ -1,3 +1,9 @@
 kafka-python
 numpy
 pandas
+torch
+torchvision
+torchaudio
+tqdm
+psutil 
+scikit-learn

@@ -24,6 +24,7 @@ def get_preprocessed_df() -> pd.DataFrame:
 
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
     df = pd.read_csv(DATASET_PATH)
+
     with open(TRAIN_META, "rb") as f:
         min_values, max_values, unique_values = pickle.load(f)
 
@@ -75,18 +76,14 @@ def send_to_queue() -> None:
     )
 
     create_topic("queue", 1, 1)
-    create_topic("ground_truth", 1, 1)
 
     X, y = get_preprocessed_df()
 
     try:
         for index, row in X.iterrows():
-            producer.send("queue", value=row.to_dict())
+            message = {"record_id": str(index), "row": row.to_dict(), "connection_tuple": (1, 1), "ground_truth": str(y.iloc[index])}
+            producer.send("queue", value=message)
             print(f"Message sent successfully to topic 'queue'")
-
-            message = {"true_label": str(y.iloc[index]), "index": str(index)}
-            producer.send("ground_truth", value=message)
-            print(f"Message sent successfully to topic 'ground_truth'")
 
             producer.flush()
             time.sleep(1)

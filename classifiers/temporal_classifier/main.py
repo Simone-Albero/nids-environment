@@ -1,7 +1,8 @@
 import time
 import json
 
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, KafkaProducer
+from kafka.admin import KafkaAdminClient, NewTopic
 import pandas as pd
 import torch
 from torchvision.transforms import Compose
@@ -26,9 +27,21 @@ class Buffer:
 
     def is_ready(self) -> bool:
         return len(self.df) == self.size
+    
+def create_topic(topic_name: str, num_partitions: int, replication_factor: int):
+    admin_client = KafkaAdminClient(bootstrap_servers="kafka:9092")
+    
+    topic = NewTopic(
+        name=topic_name,
+        num_partitions=num_partitions,
+        replication_factor=replication_factor
+    )
+    
+    admin_client.create_topics(new_topics=[topic], validate_only=False)
+    admin_client.close()
 
 
-def read_from_queue():
+def read_and_predict():
     CONFIG_PATH = "shared/dataset/dataset_properties.ini"
     DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
     MODEL_PATH = "shared/models/temporal_bin.pt"
@@ -50,6 +63,13 @@ def read_from_queue():
         group_id='temporal_consumer',
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
+
+    producer = KafkaProducer(
+        bootstrap_servers="kafka:9092",
+        value_serializer=lambda v: json.dumps(v).encode("utf-8")
+    )
+
+    create_topic("predictions", 1, 1)
 
     buffer = Buffer(8)
     model = transformer.TransformerClassifier(
@@ -77,9 +97,15 @@ def read_from_queue():
     
     try:
         for message in consumer:
-            row = message.value
+            print("Message recived!")
+            data = message.value
+
+            record_id = data["record_id"]
+            row = data["row"]
+            connection_tuple = data["connection_tuple"]
+            ground_truth = data["ground_truth"]
+
             buffer.update(row)
-            print("Recived row!")
 
             if buffer.is_ready():
                 numeric = torch.tensor(buffer.df[prop.numeric_features].values, dtype=torch.float32)
@@ -88,11 +114,14 @@ def read_from_queue():
                 categorical = categorical_sample["data"].float()
 
                 input_data = torch.cat((numeric, categorical), dim=-1).unsqueeze(0)
-                print(input_data.shape)
 
                 with torch.no_grad():
-                    output = model(input_data).squeeze(0)
-                    print(f"Predicted: {output}")
+                    prediction = model(input_data).squeeze(0)
+            
+                new_message = {"record_id": record_id, "connection_tuple": connection_tuple, "prediction": str(prediction.item()), "ground_truth": ground_truth}
+                producer.send("predictions", value=new_message)
+                print(f"Message sent successfully to topic 'predictions'")
+                producer.flush()
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -100,4 +129,7 @@ def read_from_queue():
         consumer.close()
 
 if __name__ == "__main__":
-    read_from_queue()
+    read_and_predict()
+
+
+
