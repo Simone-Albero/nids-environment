@@ -1,36 +1,31 @@
 import time
 import json
 
-from kafka import KafkaConsumer, KafkaProducer
-from kafka.admin import KafkaAdminClient, NewTopic
 import pandas as pd
 import torch
+from kafka import KafkaConsumer, KafkaProducer
+from kafka.admin import KafkaAdminClient, NewTopic
 from torchvision.transforms import Compose
 
 from nids_framework.data import properties, utilities, transformation_builder
 from nids_framework.model import transformer
 
-class Buffer:
 
-    def __init__(self, size: int) -> None:
-        self.df: pd.DataFrame = pd.DataFrame()
-        self.offset: int = 0
-        self.size = size
-    
-    def update(self, row: dict) -> None: 
-        new_row = pd.DataFrame([row])
-        self.df = pd.concat([self.df, new_row], ignore_index=True)
+CONFIG_PATH = "shared/dataset/dataset_properties.ini"
+DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
+MODEL_PATH = "shared/models/temporal_bin.pt"
 
-        if len(self.df) > self.size:
-            self.df = self.df.iloc[1:]
-        self.offset += 1
+CATEGORICAL_LEV = 32
+INPUT_SHAPE = 381
+EMBED_DIM = 256
+NUM_HEADS = 2
+NUM_LAYERS = 4
+DROPOUT = 0.1
+FF_DIM = 128
+WINDOW_SIZE = 8
 
-    def is_ready(self) -> bool:
-        return len(self.df) == self.size
-    
-def create_topic(topic_name: str, num_partitions: int, replication_factor: int):
+def create_topic(topic_name: str, num_partitions: int, replication_factor: int) -> None:
     admin_client = KafkaAdminClient(bootstrap_servers="kafka:9092")
-    
     topic = NewTopic(
         name=topic_name,
         num_partitions=num_partitions,
@@ -40,21 +35,43 @@ def create_topic(topic_name: str, num_partitions: int, replication_factor: int):
     admin_client.create_topics(new_topics=[topic], validate_only=False)
     admin_client.close()
 
+def check_kafka_connection(bootstrap_servers: str) -> bool:
+    try:
+        admin_client = KafkaAdminClient(bootstrap_servers=bootstrap_servers)
+        admin_client.list_topics()
+        admin_client.close()
+        return True
+    except Exception as e:
+        print(f"Kafka connection error: {e}")
+        return False
 
-def read_and_predict():
-    CONFIG_PATH = "shared/dataset/dataset_properties.ini"
-    DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
-    MODEL_PATH = "shared/models/temporal_bin.pt"
+def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int) -> bool:
+    for _ in range(max_retries):
+        if check_kafka_connection(bootstrap_servers):
+            return True
+        print(f"Kafka not reachable, retrying in {retry_interval} seconds...")
+        time.sleep(retry_interval)
+    return False
 
-    CATEGORICAL_LEV = 32
-    INPUT_SHAPE = 381
-    EMBED_DIM = 256
-    NUM_HEADS = 2
-    NUM_LAYERS = 4
-    DROPUT = 0.1
-    FF_DIM = 128
+class Buffer:
+    def __init__(self, size: int) -> None:
+        self.df = pd.DataFrame()
+        self.size = size
+    
+    def update(self, row: dict) -> None: 
+        new_row = pd.DataFrame([row])
+        self.df = pd.concat([self.df, new_row], ignore_index=True)
+        if len(self.df) > self.size:
+            self.df = self.df.iloc[1:]
 
-    time.sleep(10)
+    def is_ready(self) -> bool:
+        return len(self.df) == self.size
+
+def read_and_predict() -> None:
+    if not wait_for_kafka("kafka:9092", 1000, 1):
+        print("Kafka is not reachable after several retries. Exiting...")
+        return
+
     consumer = KafkaConsumer(
         'queue',
         bootstrap_servers='kafka:9092',
@@ -71,7 +88,7 @@ def read_and_predict():
 
     create_topic("predictions", 1, 1)
 
-    buffer = Buffer(8)
+    buffer = Buffer(WINDOW_SIZE)
     model = transformer.TransformerClassifier(
         num_classes=1,
         input_dim=INPUT_SHAPE,
@@ -79,15 +96,15 @@ def read_and_predict():
         num_heads=NUM_HEADS,
         num_layers=NUM_LAYERS,
         ff_dim=FF_DIM,
-        dropout=DROPUT
+        dropout=DROPOUT
     )
     model.load_state_dict(torch.load(MODEL_PATH, weights_only=True))
-
     model.eval()
 
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
-
+    
     trans_builder = transformation_builder.TransformationBuilder()
+    
     @trans_builder.add_step(order=1)
     def categorical_one_hot(sample, categorical_levels=CATEGORICAL_LEV):
         return utilities.one_hot_encoding(sample, categorical_levels)
@@ -97,7 +114,7 @@ def read_and_predict():
     
     try:
         for message in consumer:
-            print("Message recived!")
+            print("Message received!")
             data = message.value
 
             record_id = data["record_id"]
@@ -112,15 +129,19 @@ def read_and_predict():
                 categorical = torch.tensor(buffer.df[prop.categorical_features].values, dtype=torch.long)
                 categorical_sample = lazy_transformation({"data": categorical})
                 categorical = categorical_sample["data"].float()
-
                 input_data = torch.cat((numeric, categorical), dim=-1).unsqueeze(0)
 
                 with torch.no_grad():
                     prediction = model(input_data).squeeze(0)
             
-                new_message = {"record_id": record_id, "connection_tuple": connection_tuple, "prediction": str(prediction.item()), "ground_truth": ground_truth}
+                new_message = {
+                    "record_id": record_id,
+                    "connection_tuple": connection_tuple,
+                    "prediction": str(prediction.item()),
+                    "ground_truth": ground_truth
+                }
                 producer.send("predictions", value=new_message)
-                print(f"Message sent successfully to topic 'predictions'")
+                print("Message sent successfully to topic 'predictions'")
                 producer.flush()
 
     except Exception as e:
@@ -130,6 +151,3 @@ def read_and_predict():
 
 if __name__ == "__main__":
     read_and_predict()
-
-
-
