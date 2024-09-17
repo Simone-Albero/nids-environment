@@ -36,9 +36,13 @@ class PredictionMap:
     def __init__(self) -> None:
         self._data: dict[int, self.Entry] = {}
         self._lock = threading.Lock()
+        self._blacklist = []
 
     def put(self, record_id: int, prediction: float) -> None:
         with self._lock:
+            if record_id in self._blacklist:
+                return
+
             if record_id not in self._data:
                 self._data[record_id] = self.Entry(time.time())
             self._data[record_id].add(prediction)
@@ -51,6 +55,7 @@ class PredictionMap:
     def remove(self, record_id: int) -> None:
         with self._lock:
             self._data.pop(record_id, None)
+            self._blacklist.append(record_id)
 
     def __str__(self) -> str:
         with self._lock:
@@ -108,8 +113,6 @@ def read_predictions() -> None:
                 connection_tuple = data["connection_tuple"]
                 prediction = data["prediction"]
                 ground_truth = data["ground_truth"]
-
-                print(f"prediction: {prediction} gt: {ground_truth}")
 
                 prediction_map.put(record_id, prediction)
 

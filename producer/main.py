@@ -17,7 +17,7 @@ CONFIG_PATH = "shared/dataset/dataset_properties.ini"
 DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
 DATASET_PATH = "shared/dataset/NF-ToN-IoT-V2-Test.csv"
 TRAIN_META = "shared/dataset/train_meta.pkl"
-CATEGORICAL_LEV = 32
+CATEGORICAL_LEVEL = 32
 BOUND = 100000000
 
 def create_topic(topic_name: str, num_partitions: int, replication_factor: int) -> None:
@@ -49,10 +49,9 @@ def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int
         time.sleep(retry_interval)
     return False
 
-def get_preprocessed_df() -> pd.DataFrame:
+def prepare_data():
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
-
-    df = pd.read_csv(DATASET_PATH)
+    df = pd.read_csv(DATASET_PATH, nrows=100000)
     
     with open(TRAIN_META, "rb") as f:
         min_values, max_values, unique_values = pickle.load(f)
@@ -60,28 +59,33 @@ def get_preprocessed_df() -> pd.DataFrame:
     trans_builder = transformation_builder.TransformationBuilder()
 
     @trans_builder.add_step(order=1)
-    def base_pre_processing(dataset, properties):
-        utilities.base_pre_processing(dataset, properties, BOUND)
+    def base_pre_processing(dataset):
+        return utilities.base_pre_processing_row(dataset, prop, BOUND)
 
     @trans_builder.add_step(order=2)
-    def log_pre_processing(dataset, properties):
-        utilities.log_pre_processing(dataset, properties, min_values, max_values)
+    def log_pre_processing(dataset):
+        return utilities.log_pre_processing_row(dataset, prop, min_values, max_values)
 
     @trans_builder.add_step(order=3)
-    def categorical_conversion(dataset, properties):
-        utilities.categorical_pre_processing(dataset, properties, unique_values, CATEGORICAL_LEV)
+    def categorical_conversion(dataset):
+        return utilities.categorical_pre_processing_row(dataset, prop, unique_values, CATEGORICAL_LEVEL)
 
     @trans_builder.add_step(order=4)
-    def binary_label_conversion(dataset, properties):
-        utilities.binary_label_conversion(dataset, properties)
+    def binary_label_conversion(dataset):
+        return utilities.binary_label_conversion_row(dataset, prop)
     
+    @trans_builder.add_step(order=5)
+    def split_data_for_torch(dataset):
+        return utilities.split_data_for_torch_row(dataset, prop)
+
     transformations = trans_builder.build()
-    proc = processor.Processor(df, prop)
-    proc.transformations = transformations
-    proc.apply()
-    X, y = proc.build()
-    
-    return X, y
+
+    proc = processor.Processor(transformations)
+
+    return df, proc
+
+def get_connection_tuple(row: pd.Series) -> tuple[str, str, str, str, str]: 
+    return row["IPV4_SRC_ADDR"], row["L4_SRC_PORT"], row["IPV4_DST_ADDR"], row["L4_DST_PORT"], row["PROTOCOL"]
 
 def send_to_queue() -> None:
     if not wait_for_kafka("kafka:9092", 1000, 1):
@@ -95,15 +99,19 @@ def send_to_queue() -> None:
     
     create_topic("queue", 1, 1)
 
-    X, y = get_preprocessed_df()
-    
+    df, proc = prepare_data()
+
     try:
-        for index, row in X.iterrows():
+        for index, row in df.iterrows():
+            connection_tuple = get_connection_tuple(row)
+            X, y = proc.apply(row)
+            y = int(y)
+
             message = {
                 "record_id": str(index),
-                "row": row.to_dict(),
-                "connection_tuple": (1, 1),
-                "ground_truth": str(y.iloc[index])
+                "row": X.to_dict(),
+                "connection_tuple": connection_tuple,
+                "ground_truth": str(y)
             }
             producer.send("queue", value=message)
             print(f"Message sent successfully to topic 'queue'")
