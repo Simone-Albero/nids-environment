@@ -14,7 +14,7 @@ from nids_framework.model import transformer
 
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
 DATASET_NAME = "nf_ton_iot_v2_binary_ddos"
-MODEL_PATH = "shared/models/ddos_max_pol.pt"
+MODEL_PATH = "shared/models/ddos_max_pol_src.pt"
 
 CATEGORICAL_LEV = 32
 INPUT_SHAPE = 381
@@ -24,6 +24,7 @@ NUM_LAYERS = 4
 DROPOUT = 0.1
 FF_DIM = 128
 WINDOW_SIZE = 8
+TARGET = "IPV4_SRC_ADDR"
 
 def create_topic(topic_name: str, num_partitions: int, replication_factor: int) -> None:
     admin_client = KafkaAdminClient(bootstrap_servers="kafka:9092")
@@ -59,19 +60,30 @@ def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int
         time.sleep(retry_interval)
     return False
 
-class Buffer:
+class GroupingBuffer:
     def __init__(self, size: int) -> None:
-        self.df = pd.DataFrame()
+        self.groups = {}
         self.size = size
     
-    def update(self, row: dict) -> None: 
-        new_row = pd.DataFrame([row])
-        self.df = pd.concat([self.df, new_row], ignore_index=True)
-        if len(self.df) > self.size:
-            self.df = self.df.iloc[1:]
+    def update(self, row: dict, target: any) -> pd.DataFrame:
+        target_value = str(target)
+        new_row_df = pd.DataFrame([row])
+        
+        if target_value not in self.groups:
+            self.groups[target_value] = new_row_df
+        else:
+            group_df = pd.concat([self.groups[target_value], new_row_df], ignore_index=True)
+            
+            if len(group_df) > self.size:
+                group_df = group_df.iloc[1:]
 
-    def is_ready(self) -> bool:
-        return len(self.df) == self.size
+            self.groups[target_value] = group_df
+
+            if len(group_df) == self.size:
+                return group_df
+
+        return None
+        
 
 def read_and_predict() -> None:
     if not wait_for_kafka("kafka:9092", 1000, 1):
@@ -94,7 +106,8 @@ def read_and_predict() -> None:
 
     create_topic("predictions", 1, 1)
 
-    buffer = Buffer(WINDOW_SIZE)
+    buffer = GroupingBuffer(WINDOW_SIZE)
+
     model = transformer.TransformerClassifier(
         num_classes=1,
         input_dim=INPUT_SHAPE,
@@ -128,11 +141,11 @@ def read_and_predict() -> None:
             connection_tuple = data["connection_tuple"]
             ground_truth = data["ground_truth"]
 
-            buffer.update(row)
+            window = buffer.update(row, connection_tuple[TARGET])
 
-            if buffer.is_ready():
-                numeric = torch.tensor(buffer.df[prop.numeric_features].values, dtype=torch.float32)
-                categorical = torch.tensor(buffer.df[prop.categorical_features].values, dtype=torch.long)
+            if window is not None:
+                numeric = torch.tensor(window[prop.numeric_features].values, dtype=torch.float32)
+                categorical = torch.tensor(window[prop.categorical_features].values, dtype=torch.long)
                 categorical = lazy_transformation(categorical)
                 categorical = categorical.float()
                 input_data = torch.cat((numeric, categorical), dim=-1).unsqueeze(0)

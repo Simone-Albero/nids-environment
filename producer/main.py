@@ -90,8 +90,15 @@ def prepare_data():
 
     return df, proc
 
-def get_connection_tuple(row: pd.Series) -> tuple[str, str, str, str, str]: 
-    return row["IPV4_SRC_ADDR"], row["L4_SRC_PORT"], row["IPV4_DST_ADDR"], row["L4_DST_PORT"], row["PROTOCOL"]
+def get_connection_tuple(row: pd.Series) -> pd.Series:
+    connection_tuple = row[[
+        "IPV4_SRC_ADDR",
+        "L4_SRC_PORT",
+        "IPV4_DST_ADDR",
+        "L4_DST_PORT",
+        "PROTOCOL"
+    ]]
+    return connection_tuple
 
 def send_to_queue() -> None:
     if not wait_for_kafka("kafka:9092", 1000, 1):
@@ -116,13 +123,12 @@ def send_to_queue() -> None:
             message = {
                 "record_id": str(index),
                 "row": X.to_dict(),
-                "connection_tuple": connection_tuple,
+                "connection_tuple": connection_tuple.to_dict(),
                 "ground_truth": str(y)
             }
             producer.send("queue", value=message)
             print(f"Message sent successfully to topic 'queue'")
             producer.flush()
-            time.sleep(1)
     
     except Exception as e:
         print(f"An error occurred: {e}")

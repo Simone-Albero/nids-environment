@@ -5,6 +5,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from kafka import KafkaConsumer, KafkaAdminClient
 
+STAMP_THRESHOLD = 10
 
 def check_kafka_connection(bootstrap_servers: str) -> bool:
     try:
@@ -100,7 +101,6 @@ def read_predictions() -> None:
 
     prediction_map = PredictionMap()
     record_registry = {}
-    STAMP_THRESHOLD = 5
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         monitor_future = executor.submit(handle_predictions, prediction_map, record_registry, STAMP_THRESHOLD, make_prediction)
