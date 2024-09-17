@@ -5,6 +5,7 @@ import json
 import pandas as pd
 from kafka import KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
+from kafka.errors import TopicAlreadyExistsError
 
 from nids_framework.data import (
     properties,
@@ -28,8 +29,13 @@ def create_topic(topic_name: str, num_partitions: int, replication_factor: int) 
         replication_factor=replication_factor
     )
     
-    admin_client.create_topics(new_topics=[topic], validate_only=False)
-    admin_client.close()
+    try:
+        admin_client.create_topics(new_topics=[topic], validate_only=False)
+        print(f"Topic '{topic_name}' created successfully.")
+    except TopicAlreadyExistsError:
+        print(f"Topic '{topic_name}' already exists.")
+    finally:
+        admin_client.close()
 
 def check_kafka_connection(bootstrap_servers: str) -> bool:
     try:

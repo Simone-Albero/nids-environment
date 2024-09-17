@@ -53,16 +53,29 @@ services:
     networks:
       - main-network
 
-  temporal_classifier:
+  benign_classifier:
     build:
-      context: ./classifiers/temporal_classifier
-    container_name: temporal_classifier
+      context: ./classifiers/benign_classifier
+    container_name: benign_classifier
     volumes:
       - ./shared_data:/src/shared
     depends_on:
       - kafka
     ports:
       - "5001:5001"
+    networks:
+      - main-network
+
+  ddos_classifier:
+    build:
+      context: ./classifiers/ddos_classifier
+    container_name: ddos_classifier
+    volumes:
+      - ./shared_data:/src/shared
+    depends_on:
+      - kafka
+    ports:
+      - "5002:5002"
     networks:
       - main-network
 

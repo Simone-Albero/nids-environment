@@ -94,7 +94,7 @@ def read_predictions() -> None:
         bootstrap_servers='kafka:9092',
         auto_offset_reset='earliest',
         enable_auto_commit=True,
-        group_id='temporal_consumer',
+        group_id='predictor',
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
 

@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
+from kafka.errors import TopicAlreadyExistsError
 from torchvision.transforms import Compose
 
 from nids_framework.data import properties, utilities, transformation_builder
@@ -12,8 +13,8 @@ from nids_framework.model import transformer
 
 
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
-DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
-MODEL_PATH = "shared/models/temporal_bin.pt"
+DATASET_NAME = "nf_ton_iot_v2_binary_ddos"
+MODEL_PATH = "shared/models/ddos_max_pol.pt"
 
 CATEGORICAL_LEV = 32
 INPUT_SHAPE = 381
@@ -32,8 +33,13 @@ def create_topic(topic_name: str, num_partitions: int, replication_factor: int) 
         replication_factor=replication_factor
     )
     
-    admin_client.create_topics(new_topics=[topic], validate_only=False)
-    admin_client.close()
+    try:
+        admin_client.create_topics(new_topics=[topic], validate_only=False)
+        print(f"Topic '{topic_name}' created successfully.")
+    except TopicAlreadyExistsError:
+        print(f"Topic '{topic_name}' already exists.")
+    finally:
+        admin_client.close()
 
 def check_kafka_connection(bootstrap_servers: str) -> bool:
     try:
@@ -77,7 +83,7 @@ def read_and_predict() -> None:
         bootstrap_servers='kafka:9092',
         auto_offset_reset='earliest',
         enable_auto_commit=True,
-        group_id='temporal_consumer',
+        group_id='ddos_consumer',
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
 
@@ -127,8 +133,8 @@ def read_and_predict() -> None:
             if buffer.is_ready():
                 numeric = torch.tensor(buffer.df[prop.numeric_features].values, dtype=torch.float32)
                 categorical = torch.tensor(buffer.df[prop.categorical_features].values, dtype=torch.long)
-                categorical_sample = lazy_transformation({"data": categorical})
-                categorical = categorical_sample["data"].float()
+                categorical = lazy_transformation(categorical)
+                categorical = categorical.float()
                 input_data = torch.cat((numeric, categorical), dim=-1).unsqueeze(0)
 
                 with torch.no_grad():
