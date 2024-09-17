@@ -4,6 +4,9 @@ import threading
 
 from concurrent.futures import ThreadPoolExecutor
 from kafka import KafkaConsumer, KafkaAdminClient
+import torch
+
+from nids_framework.training import metrics
 
 STAMP_THRESHOLD = 10
 
@@ -39,21 +42,21 @@ class PredictionMap:
         self._lock = threading.Lock()
         self._blacklist = []
 
-    def put(self, record_id: int, prediction: float) -> None:
+    def put(self, record_id: str, prediction: str) -> None:
         with self._lock:
             if record_id in self._blacklist:
                 return
 
             if record_id not in self._data:
                 self._data[record_id] = self.Entry(time.time())
-            self._data[record_id].add(prediction)
+            self._data[record_id].add(float(prediction))
 
-    def get(self, record_id: int) -> tuple[float, list[float]]:
+    def get(self, record_id: int) -> tuple[str, list[float]]:
         with self._lock:
             entry = self._data.get(record_id)
             return (entry.timestamp, entry.predictions) if entry else (None, [])
 
-    def remove(self, record_id: int) -> None:
+    def remove(self, record_id: str) -> None:
         with self._lock:
             self._data.pop(record_id, None)
             self._blacklist.append(record_id)
@@ -63,12 +66,28 @@ class PredictionMap:
             return str({k: (v.timestamp, v.predictions) for k, v in self._data.items()})
 
 
-def make_prediction(record_id: int, predictions: list[float], record_registry: dict) -> None:
-    print(record_id)
-    print(predictions, record_registry.get(record_id))
+def make_prediction(
+    record_id: int, predictions: list[float], record_registry: dict, metric: metrics.Metric
+) -> None:
+    print(f"Record ID: {record_id} -> Predictions: {predictions}")
+    
+    record_info = record_registry.get(record_id)
+    print(f"Record Info: {record_info}")
+
+    threshold = 0.5
+
+    confidence_scores = [2 * abs(pred - threshold) for pred in predictions] 
+    weighted_sum = sum(conf * pred for conf, pred in zip(confidence_scores, predictions))
+    total_confidence = sum(confidence_scores)
+
+    aggregated_prediction = weighted_sum / total_confidence if total_confidence > 0 else threshold
+    print(f"Aggregated Prediction: {aggregated_prediction}")
+
+    #metric.step(torch.tensor(aggregated_prediction), torch.tensor(record_info[1]))
 
 
-def handle_predictions(prediction_map: PredictionMap, record_registry: dict, threshold: float, callback: callable) -> None:
+
+def handle_predictions(prediction_map: PredictionMap, record_registry: dict, threshold: float, metric: metrics.Metric, callback: callable) -> None:
     while True:
         current_time = time.time()
         old_entries = []
@@ -80,7 +99,7 @@ def handle_predictions(prediction_map: PredictionMap, record_registry: dict, thr
 
         for record_id, predictions in old_entries:
             prediction_map.remove(record_id)
-            callback(record_id, predictions, record_registry)
+            callback(record_id, predictions, record_registry, metric)
 
         time.sleep(1)
 
@@ -99,11 +118,12 @@ def read_predictions() -> None:
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
 
+    metric = metrics.BinaryClassificationMetric()
     prediction_map = PredictionMap()
     record_registry = {}
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        monitor_future = executor.submit(handle_predictions, prediction_map, record_registry, STAMP_THRESHOLD, make_prediction)
+        monitor_future = executor.submit(handle_predictions, prediction_map, record_registry, STAMP_THRESHOLD, metric, make_prediction)
 
         try:
             for message in consumer:
@@ -117,7 +137,7 @@ def read_predictions() -> None:
                 prediction_map.put(record_id, prediction)
 
                 if record_id not in record_registry:
-                    record_registry[record_id] = (connection_tuple, ground_truth)
+                    record_registry[record_id] = (connection_tuple, float(ground_truth))
         
         except Exception as e:
             print(f"An error occurred: {e}")
@@ -126,6 +146,9 @@ def read_predictions() -> None:
             consumer.close()
             monitor_future.cancel()
             monitor_future.result()  # Ensure handle_predictions completes
+
+            metric.compute_metrics()
+            print(metric)
 
 if __name__ == "__main__":
     read_predictions()
