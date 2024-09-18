@@ -8,7 +8,7 @@ import torch
 
 from nids_framework.training import metrics
 
-STAMP_THRESHOLD = 10
+STAMP_THRESHOLD = 20
 
 def check_kafka_connection(bootstrap_servers: str) -> bool:
     try:
@@ -83,7 +83,9 @@ def make_prediction(
     aggregated_prediction = weighted_sum / total_confidence if total_confidence > 0 else threshold
     print(f"Aggregated Prediction: {aggregated_prediction}")
 
-    #metric.step(torch.tensor(aggregated_prediction), torch.tensor(record_info[1]))
+    metric.step(torch.tensor(aggregated_prediction).unsqueeze(0), torch.tensor(record_info[1]).unsqueeze(0))
+    metric.compute_metrics()
+    print(metric)
 
 
 
@@ -101,7 +103,7 @@ def handle_predictions(prediction_map: PredictionMap, record_registry: dict, thr
             prediction_map.remove(record_id)
             callback(record_id, predictions, record_registry, metric)
 
-        time.sleep(1)
+        #time.sleep(1)
 
 
 def read_predictions() -> None:
