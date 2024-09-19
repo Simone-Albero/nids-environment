@@ -38,28 +38,28 @@ class PredictionMap:
             self.predictions.append(prediction)
 
     def __init__(self) -> None:
-        self._data: dict[int, self.Entry] = {}
+        self._data: dict[str, self.Entry] = {}
         self._lock = threading.Lock()
-        self._blacklist = []
+        self._blacklist = set()  # Use a set for O(1) lookups
 
     def put(self, record_id: str, prediction: str) -> None:
         with self._lock:
             if record_id in self._blacklist:
                 return
 
-            if record_id not in self._data:
-                self._data[record_id] = self.Entry(time.time())
-            self._data[record_id].add(float(prediction))
+            entry = self._data.setdefault(record_id, self.Entry(time.time()))
+            entry.add(float(prediction))
 
-    def get(self, record_id: int) -> tuple[str, list[float]]:
+    def get(self, record_id: str) -> tuple[float, list[float]]:
         with self._lock:
             entry = self._data.get(record_id)
             return (entry.timestamp, entry.predictions) if entry else (None, [])
 
     def remove(self, record_id: str) -> None:
         with self._lock:
-            self._data.pop(record_id, None)
-            self._blacklist.append(record_id)
+            if record_id in self._data:
+                self._data.pop(record_id, None)
+                self._blacklist.add(record_id)
 
     def __str__(self) -> str:
         with self._lock:
@@ -95,15 +95,13 @@ def handle_predictions(prediction_map: PredictionMap, record_registry: dict, thr
         old_entries = []
 
         with prediction_map._lock:
-            for record_id, entry in list(prediction_map._data.items()):
-                if current_time - entry.timestamp > threshold:
-                    old_entries.append((record_id, entry.predictions))
+            old_entries = [(record_id, entry.predictions)
+                           for record_id, entry in prediction_map._data.items()
+                           if current_time - entry.timestamp > threshold]
 
         for record_id, predictions in old_entries:
             prediction_map.remove(record_id)
             callback(record_id, predictions, record_registry, metric)
-
-        #time.sleep(1)
 
 
 def read_predictions() -> None:

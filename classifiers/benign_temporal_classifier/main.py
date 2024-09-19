@@ -1,5 +1,6 @@
 import time
 import json
+from collections import deque
 
 import pandas as pd
 import torch
@@ -58,20 +59,19 @@ def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int
         print(f"Kafka not reachable, retrying in {retry_interval} seconds...")
         time.sleep(retry_interval)
     return False
-
+    
 class Buffer:
     def __init__(self, size: int) -> None:
-        self.df = pd.DataFrame()
+        self.rows = deque(maxlen=size)
         self.size = size
     
     def update(self, row: dict) -> None: 
-        new_row = pd.DataFrame([row])
-        self.df = pd.concat([self.df, new_row], ignore_index=True)
-        if len(self.df) > self.size:
-            self.df = self.df.iloc[1:]
+        self.rows.append(row)
 
-    def is_ready(self) -> bool:
-        return len(self.df) == self.size
+        if len(self.rows) == self.size:
+            return pd.DataFrame(self.rows)
+        
+        return None
 
 def read_and_predict() -> None:
     if not wait_for_kafka("kafka:9092", 1000, 1):
@@ -128,11 +128,11 @@ def read_and_predict() -> None:
             connection_tuple = data["connection_tuple"]
             ground_truth = data["ground_truth"]
 
-            buffer.update(row)
+            window = buffer.update(row)
 
-            if buffer.is_ready():
-                numeric = torch.tensor(buffer.df[prop.numeric_features].values, dtype=torch.float32)
-                categorical = torch.tensor(buffer.df[prop.categorical_features].values, dtype=torch.long)
+            if window is not None:
+                numeric = torch.tensor(window[prop.numeric_features].values, dtype=torch.float32)
+                categorical = torch.tensor(window[prop.categorical_features].values, dtype=torch.long)
                 categorical = lazy_transformation(categorical)
                 categorical = categorical.float()
                 input_data = torch.cat((numeric, categorical), dim=-1).unsqueeze(0)
@@ -147,7 +147,7 @@ def read_and_predict() -> None:
                     "ground_truth": ground_truth
                 }
                 producer.send("predictions", value=new_message)
-                print("Message sent successfully to topic 'predictions'")
+                print(f"Message '{record_id}' sent successfully to topic 'predictions'")
                 producer.flush()
 
     except Exception as e:

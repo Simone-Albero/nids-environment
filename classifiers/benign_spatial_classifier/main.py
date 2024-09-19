@@ -1,5 +1,6 @@
 import time
 import json
+from collections import deque, defaultdict
 
 import pandas as pd
 import torch
@@ -62,26 +63,17 @@ def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int
 
 class GroupingBuffer:
     def __init__(self, size: int) -> None:
-        self.groups = {}
+        self.groups = defaultdict(lambda: deque(maxlen=size))
         self.size = size
     
-    def update(self, row: dict, target_value: any) -> pd.DataFrame:
-        #target_value = str(target)
-        new_row_df = pd.DataFrame([row])
+    def update(self, row: dict, target: any) -> pd.DataFrame:
+        target_deque = self.groups[target]
         
-        if target_value not in self.groups:
-            self.groups[target_value] = new_row_df
-        else:
-            group_df = pd.concat([self.groups[target_value], new_row_df], ignore_index=True)
-            
-            if len(group_df) > self.size:
-                group_df = group_df.iloc[1:]
-
-            self.groups[target_value] = group_df
-
-            if len(group_df) == self.size:
-                return group_df
-
+        target_deque.append(row)
+        
+        if len(target_deque) == self.size:
+            return pd.DataFrame(target_deque)
+        
         return None
         
 
@@ -160,7 +152,7 @@ def read_and_predict() -> None:
                     "ground_truth": ground_truth
                 }
                 producer.send("predictions", value=new_message)
-                print("Message sent successfully to topic 'predictions'")
+                print(f"Message '{record_id}' sent successfully to topic 'predictions'")
                 producer.flush()
 
     except Exception as e:
