@@ -53,10 +53,10 @@ services:
     networks:
       - main-network
 
-  benign_classifier:
+  benign_temporal_classifier:
     build:
-      context: ./classifiers/benign_classifier
-    container_name: benign_classifier
+      context: ./classifiers/benign_temporal_classifier
+    container_name: benign_temporal_classifier
     volumes:
       - ./shared_data:/src/shared
     depends_on:
@@ -66,10 +66,10 @@ services:
     networks:
       - main-network
 
-  ddos_classifier:
+  benign_spatial_classifier:
     build:
-      context: ./classifiers/ddos_classifier
-    container_name: ddos_classifier
+      context: ./classifiers/benign_spatial_classifier
+    container_name: benign_spatial_classifier
     volumes:
       - ./shared_data:/src/shared
     depends_on:

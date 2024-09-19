@@ -14,7 +14,7 @@ from nids_framework.model import transformer
 
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
 DATASET_NAME = "nf_ton_iot_v2_binary_ddos"
-MODEL_PATH = "shared/models/ddos_max_pol_src.pt"
+MODEL_PATH = "shared/models/benign_max_pol_src.pt"
 
 CATEGORICAL_LEV = 32
 INPUT_SHAPE = 381
@@ -65,8 +65,8 @@ class GroupingBuffer:
         self.groups = {}
         self.size = size
     
-    def update(self, row: dict, target: any) -> pd.DataFrame:
-        target_value = str(target)
+    def update(self, row: dict, target_value: any) -> pd.DataFrame:
+        #target_value = str(target)
         new_row_df = pd.DataFrame([row])
         
         if target_value not in self.groups:
