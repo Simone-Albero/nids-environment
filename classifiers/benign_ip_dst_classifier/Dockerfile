@@ -4,6 +4,6 @@ WORKDIR /src
 
 COPY main.py ./
 
-EXPOSE 6000
+EXPOSE 5003
 
 CMD ["python", "main.py"]

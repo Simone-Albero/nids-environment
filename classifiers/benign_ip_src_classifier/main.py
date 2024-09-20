@@ -1,6 +1,6 @@
 import time
 import json
-from collections import deque
+from collections import deque, defaultdict
 
 import pandas as pd
 import torch
@@ -14,11 +14,13 @@ from nids_framework.model import transformer
 
 
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
-DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
-MODEL_PATH = "shared/models/benign_max_pol.pt"
+DATASET_NAME = "nf_unsw_nb15_v2_binary_anonymous"
+MODEL_PATH = "shared/models/unsw/benign_ip_src.pt"
+
+TARGET = "IPV4_SRC_ADDR"
 
 CATEGORICAL_LEV = 32
-INPUT_SHAPE = 381
+INPUT_SHAPE = 382
 EMBED_DIM = 256
 NUM_HEADS = 2
 NUM_LAYERS = 4
@@ -59,19 +61,22 @@ def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int
         print(f"Kafka not reachable, retrying in {retry_interval} seconds...")
         time.sleep(retry_interval)
     return False
-    
-class Buffer:
+
+class GroupingBuffer:
     def __init__(self, size: int) -> None:
-        self.rows = deque(maxlen=size)
+        self.groups = defaultdict(lambda: deque(maxlen=size))
         self.size = size
     
-    def update(self, row: dict) -> None: 
-        self.rows.append(row)
-
-        if len(self.rows) == self.size:
-            return pd.DataFrame(self.rows)
+    def update(self, row: dict, target: any) -> pd.DataFrame:
+        target_deque = self.groups[target]
+        
+        target_deque.append(row)
+        
+        if len(target_deque) == self.size:
+            return pd.DataFrame(target_deque)
         
         return None
+        
 
 def read_and_predict() -> None:
     if not wait_for_kafka("kafka:9092", 1000, 1):
@@ -83,7 +88,7 @@ def read_and_predict() -> None:
         bootstrap_servers='kafka:9092',
         auto_offset_reset='earliest',
         enable_auto_commit=True,
-        group_id='benign_consumer',
+        group_id='ip_src_consumer',
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
 
@@ -94,7 +99,8 @@ def read_and_predict() -> None:
 
     create_topic("predictions", 1, 1)
 
-    buffer = Buffer(WINDOW_SIZE)
+    buffer = GroupingBuffer(WINDOW_SIZE)
+
     model = transformer.TransformerClassifier(
         num_classes=1,
         input_dim=INPUT_SHAPE,
@@ -128,7 +134,7 @@ def read_and_predict() -> None:
             connection_tuple = data["connection_tuple"]
             ground_truth = data["ground_truth"]
 
-            window = buffer.update(row)
+            window = buffer.update(row, connection_tuple[TARGET])
 
             if window is not None:
                 numeric = torch.tensor(window[prop.numeric_features].values, dtype=torch.float32)

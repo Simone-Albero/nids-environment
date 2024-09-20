@@ -27,6 +27,10 @@ services:
     networks:
       - main-network
 
+  framework_base:
+    build:
+      context: ./framework_base
+
   producer:
     build:
       context: ./producer
@@ -34,6 +38,7 @@ services:
     volumes:
       - ./shared_data:/src/shared
     depends_on:
+      - framework_base
       - kafka
     ports:
       - "6000:6000"
@@ -47,35 +52,52 @@ services:
     volumes:
       - ./shared_data:/src/shared
     depends_on:
+      - framework_base
       - kafka
     ports:
       - "6001:6001"
     networks:
       - main-network
 
-  benign_temporal_classifier:
+  benign_time_classifier:
     build:
-      context: ./classifiers/benign_temporal_classifier
-    container_name: benign_temporal_classifier
+      context: ./classifiers/benign_time_classifier
+    container_name: benign_time_classifier
     volumes:
       - ./shared_data:/src/shared
     depends_on:
+      - framework_base
       - kafka
     ports:
       - "5001:5001"
     networks:
       - main-network
 
-  benign_spatial_classifier:
+  benign_ip_src_classifier:
     build:
-      context: ./classifiers/benign_spatial_classifier
-    container_name: benign_spatial_classifier
+      context: ./classifiers/benign_ip_src_classifier
+    container_name: benign_ip_src_classifier
     volumes:
       - ./shared_data:/src/shared
     depends_on:
+      - framework_base
       - kafka
     ports:
       - "5002:5002"
+    networks:
+      - main-network
+  
+  benign_ip_dst_classifier:
+    build:
+      context: ./classifiers/benign_ip_dst_classifier
+    container_name: benign_ip_dst_classifier
+    volumes:
+      - ./shared_data:/src/shared
+    depends_on:
+      - framework_base
+      - kafka
+    ports:
+      - "5003:5003"
     networks:
       - main-network
 

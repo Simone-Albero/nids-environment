@@ -15,9 +15,12 @@ from nids_framework.data import (
 )
 
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
-DATASET_NAME = "nf_ton_iot_v2_binary_anonymous"
-DATASET_PATH = "shared/dataset/NF-ToN-IoT-V2-Test.csv"
-TRAIN_META = "shared/dataset/train_meta.pkl"
+DATASET_NAME = "nf_unsw_nb15_v2_binary_anonymous"
+
+DATASET_PATH = "shared/dataset/unsw/Test.csv"
+TRAIN_META = "shared/dataset/unsw/train_meta.pkl"
+TEST_LIMIT = 5000
+
 CATEGORICAL_LEVEL = 32
 BOUND = 100000000
 
@@ -57,7 +60,7 @@ def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int
 
 def prepare_data():
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
-    df = pd.read_csv(DATASET_PATH, nrows=100000)
+    df = pd.read_csv(DATASET_PATH, nrows=TEST_LIMIT)
     
     with open(TRAIN_META, "rb") as f:
         min_values, max_values, unique_values = pickle.load(f)
