@@ -160,6 +160,7 @@ def read_and_predict() -> None:
         print(f"An error occurred: {e}")
     finally:
         consumer.close()
+        producer.close()
 
 if __name__ == "__main__":
     read_and_predict()
