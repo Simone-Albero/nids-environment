@@ -19,8 +19,12 @@ up:
 	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) up -d
 
 down:
-	@echo "Stopping services..."
+	@echo "Removing services..."
 	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) down
+
+stop:
+	@echo "Stopping services..."
+	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) stop
 
 logs:
 	@echo "Showing logs..."
