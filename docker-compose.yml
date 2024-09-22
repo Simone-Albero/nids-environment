@@ -27,10 +27,6 @@ services:
     networks:
       - main-network
 
-  framework_base:
-    build:
-      context: ./framework_base
-
   producer:
     build:
       context: ./producer
@@ -38,7 +34,6 @@ services:
     volumes:
       - ./shared_data:/src/shared
     depends_on:
-      - framework_base
       - kafka
     ports:
       - "6000:6000"
@@ -52,7 +47,6 @@ services:
     volumes:
       - ./shared_data:/src/shared
     depends_on:
-      - framework_base
       - kafka
     ports:
       - "6001:6001"
@@ -66,7 +60,6 @@ services:
     volumes:
       - ./shared_data:/src/shared
     depends_on:
-      - framework_base
       - kafka
     ports:
       - "5001:5001"
@@ -80,7 +73,6 @@ services:
     volumes:
       - ./shared_data:/src/shared
     depends_on:
-      - framework_base
       - kafka
     ports:
       - "5002:5002"
@@ -94,7 +86,6 @@ services:
     volumes:
       - ./shared_data:/src/shared
     depends_on:
-      - framework_base
       - kafka
     ports:
       - "5003:5003"

@@ -1,4 +1,4 @@
-FROM nids-environment-framework_base:latest
+FROM base_component:latest
 
 WORKDIR /src
 

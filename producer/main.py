@@ -1,12 +1,9 @@
-import time
 import pickle
 import json
 
 import pandas as pd
-from kafka import KafkaProducer
-from kafka.admin import KafkaAdminClient, NewTopic
-from kafka.errors import TopicAlreadyExistsError
 
+from modules.kafka_utilities import Producer
 from nids_framework.data import (
     properties,
     processor,
@@ -23,40 +20,6 @@ TEST_LIMIT = 5000
 
 CATEGORICAL_LEVEL = 32
 BOUND = 100000000
-
-def create_topic(topic_name: str, num_partitions: int, replication_factor: int) -> None:
-    admin_client = KafkaAdminClient(bootstrap_servers="kafka:9092")
-    topic = NewTopic(
-        name=topic_name,
-        num_partitions=num_partitions,
-        replication_factor=replication_factor
-    )
-    
-    try:
-        admin_client.create_topics(new_topics=[topic], validate_only=False)
-        print(f"Topic '{topic_name}' created successfully.")
-    except TopicAlreadyExistsError:
-        print(f"Topic '{topic_name}' already exists.")
-    finally:
-        admin_client.close()
-
-def check_kafka_connection(bootstrap_servers: str) -> bool:
-    try:
-        admin_client = KafkaAdminClient(bootstrap_servers=bootstrap_servers)
-        admin_client.list_topics()
-        admin_client.close()
-        return True
-    except Exception as e:
-        print(f"Kafka connection error: {e}")
-        return False
-
-def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int) -> bool:
-    for _ in range(max_retries):
-        if check_kafka_connection(bootstrap_servers):
-            return True
-        print(f"Kafka not reachable, retrying in {retry_interval} seconds...")
-        time.sleep(retry_interval)
-    return False
 
 def prepare_data():
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
@@ -104,16 +67,8 @@ def get_connection_tuple(row: pd.Series) -> pd.Series:
     return connection_tuple
 
 def send_to_queue() -> None:
-    if not wait_for_kafka("kafka:9092", 1000, 1):
-        print("Kafka is not reachable after several retries. Exiting...")
-        return
-
-    producer = KafkaProducer(
-        bootstrap_servers="kafka:9092",
-        value_serializer=lambda v: json.dumps(v).encode("utf-8")
-    )
-    
-    create_topic("queue", 1, 1)
+    producer = Producer("kafka:9092", lambda v: json.dumps(v).encode("utf-8"))
+    producer.create_topic("queue", 1, 1)
 
     df, proc = prepare_data()
 
@@ -130,7 +85,6 @@ def send_to_queue() -> None:
                 "ground_truth": str(y)
             }
             producer.send("queue", value=message)
-            print(f"Message sent successfully to topic 'queue'")
             producer.flush()
     
     except Exception as e:

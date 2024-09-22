@@ -3,30 +3,12 @@ import json
 import threading
 
 from concurrent.futures import ThreadPoolExecutor
-from kafka import KafkaConsumer, KafkaAdminClient
 import torch
 
+from modules.kafka_utilities import Consumer
 from nids_framework.training import metrics
 
 STAMP_THRESHOLD = 20
-
-def check_kafka_connection(bootstrap_servers: str) -> bool:
-    try:
-        admin_client = KafkaAdminClient(bootstrap_servers=bootstrap_servers)
-        admin_client.list_topics()
-        admin_client.close()
-        return True
-    except Exception as e:
-        print(f"Kafka connection error: {e}")
-        return False
-
-def wait_for_kafka(bootstrap_servers: str, max_retries: int, retry_interval: int) -> bool:
-    for _ in range(max_retries):
-        if check_kafka_connection(bootstrap_servers):
-            return True
-        print(f"Kafka not reachable, retrying in {retry_interval} seconds...")
-        time.sleep(retry_interval)
-    return False
 
 class PredictionMap:
     class Entry:
@@ -40,7 +22,7 @@ class PredictionMap:
     def __init__(self) -> None:
         self._data: dict[str, self.Entry] = {}
         self._lock = threading.Lock()
-        self._blacklist = set()  # Use a set for O(1) lookups
+        self._blacklist = set()
 
     def put(self, record_id: str, prediction: str) -> None:
         with self._lock:
@@ -104,19 +86,9 @@ def handle_predictions(prediction_map: PredictionMap, record_registry: dict, thr
             callback(record_id, predictions, record_registry, metric)
 
 
-def read_predictions() -> None:
-    if not wait_for_kafka("kafka:9092", 1000, 1):
-        print("Kafka is not reachable after several retries. Exiting...")
-        return
-
-    consumer = KafkaConsumer(
-        'predictions',
-        bootstrap_servers='kafka:9092',
-        auto_offset_reset='earliest',
-        enable_auto_commit=True,
-        group_id='predictor',
-        value_deserializer=lambda x: json.loads(x.decode('utf-8'))
-    )
+def aggregate_predictions() -> None:
+    consumer = Consumer("kafka:9092", "predictor", lambda x: json.loads(x.decode('utf-8')))
+    consumer.subscribe(['predictions'])
 
     metric = metrics.BinaryClassificationMetric()
     prediction_map = PredictionMap()
@@ -151,4 +123,4 @@ def read_predictions() -> None:
             print(metric)
 
 if __name__ == "__main__":
-    read_predictions()
+    aggregate_predictions()
