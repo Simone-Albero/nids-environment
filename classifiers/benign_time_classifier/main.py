@@ -5,7 +5,8 @@ from modules.live_classifier import LiveClassifier
 
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
 DATASET_NAME = "nf_unsw_nb15_v2_binary_anonymous"
-MODEL_PATH = "shared/models/unsw/benign_time.pt"
+MODEL_PATH = "shared/models/unsw/Benign_time.pt"
+#MODEL_PATH = "shared/models/unsw/Fuzzers_time.pt"
 
 CATEGORICAL_LEV = 32
 INPUT_SHAPE = 382

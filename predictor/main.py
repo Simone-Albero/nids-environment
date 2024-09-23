@@ -8,7 +8,7 @@ import torch
 from modules.kafka_utilities import Consumer
 from nids_framework.training import metrics
 
-STAMP_THRESHOLD = 20
+STAMP_THRESHOLD = 30
 
 class PredictionMap:
     class Entry:
@@ -68,6 +68,22 @@ def make_prediction(
     metric.step(torch.tensor(aggregated_prediction).unsqueeze(0), torch.tensor(record_info[1]).unsqueeze(0))
     metric.compute_metrics()
     print(metric)
+
+# def make_prediction(
+#     record_id: int, predictions: list[float], record_registry: dict, metric: metrics.Metric
+# ) -> None:
+#     print(f"Record ID: {record_id} -> Predictions: {predictions}")
+    
+#     record_info = record_registry.get(record_id)
+#     print(f"Record Info: {record_info}")
+
+#     aggregated_prediction = max(predictions)
+#     print(f"Aggregated Prediction: {aggregated_prediction}")
+
+#     metric.step(torch.tensor(aggregated_prediction).unsqueeze(0), torch.tensor(record_info[1]).unsqueeze(0))
+#     metric.compute_metrics()
+#     print(metric)
+
 
 
 

@@ -2,7 +2,7 @@ COMPOSE_FILE = docker-compose.yml
 PROJECT_NAME = nids_environment
 SERVICE = web
 
-.PHONY: full_build build up down logs restart clean
+.PHONY: full_build build up down logs restart prune full_clean clean
 
 full_build:
 	@echo "Building base_component image using Docker..."
@@ -31,6 +31,10 @@ logs:
 	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) logs -f
 
 restart: down up
+
+prune: 
+	@echo "Cleaning dangling images..."
+	docker image prune
 
 full_clean:
 	@echo "Stopping and cleaning up all containers, volumes, networks, and images..."

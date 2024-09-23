@@ -24,6 +24,7 @@ BOUND = 100000000
 def prepare_data():
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
     df = pd.read_csv(DATASET_PATH, nrows=TEST_LIMIT)
+    #df = df[df['Attack'].isin(["Benign", "Fuzzers", "Exploits", "Reconnaissance"])]
     
     with open(TRAIN_META, "rb") as f:
         min_values, max_values, unique_values = pickle.load(f)
