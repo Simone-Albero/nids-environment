@@ -14,7 +14,7 @@ from nids_framework.data import (
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
 DATASET_NAME = "nf_unsw_nb15_v2_binary_anonymous"
 
-DATASET_PATH = "shared/dataset/unsw/Test.csv"
+DATASET_PATH = "shared/dataset/unsw/Custom-Test.csv"
 TRAIN_META = "shared/dataset/unsw/train_meta.pkl"
 TEST_LIMIT = 5000
 
@@ -23,7 +23,8 @@ BOUND = 100000000
 
 def prepare_data():
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
-    df = pd.read_csv(DATASET_PATH, nrows=TEST_LIMIT)
+    df = pd.read_csv(DATASET_PATH)
+    #df = pd.read_csv(DATASET_PATH, nrows=TEST_LIMIT)
     #df = df[df['Attack'].isin(["Benign", "Fuzzers", "Exploits", "Reconnaissance"])]
     
     with open(TRAIN_META, "rb") as f:

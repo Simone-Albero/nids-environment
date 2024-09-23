@@ -8,7 +8,8 @@ import torch
 from modules.kafka_utilities import Consumer
 from nids_framework.training import metrics
 
-STAMP_THRESHOLD = 30
+STAMP_THRESHOLD = 50
+NUM_CLASSIFIERS = 3
 
 class PredictionMap:
     class Entry:
@@ -48,27 +49,6 @@ class PredictionMap:
             return str({k: (v.timestamp, v.predictions) for k, v in self._data.items()})
 
 
-def make_prediction(
-    record_id: int, predictions: list[float], record_registry: dict, metric: metrics.Metric
-) -> None:
-    print(f"Record ID: {record_id} -> Predictions: {predictions}")
-    
-    record_info = record_registry.get(record_id)
-    print(f"Record Info: {record_info}")
-
-    threshold = 0.5
-
-    confidence_scores = [2 * abs(pred - threshold) for pred in predictions] 
-    weighted_sum = sum(conf * pred for conf, pred in zip(confidence_scores, predictions))
-    total_confidence = sum(confidence_scores)
-
-    aggregated_prediction = weighted_sum / total_confidence if total_confidence > 0 else threshold
-    print(f"Aggregated Prediction: {aggregated_prediction}")
-
-    metric.step(torch.tensor(aggregated_prediction).unsqueeze(0), torch.tensor(record_info[1]).unsqueeze(0))
-    metric.compute_metrics()
-    print(metric)
-
 # def make_prediction(
 #     record_id: int, predictions: list[float], record_registry: dict, metric: metrics.Metric
 # ) -> None:
@@ -77,15 +57,30 @@ def make_prediction(
 #     record_info = record_registry.get(record_id)
 #     print(f"Record Info: {record_info}")
 
-#     aggregated_prediction = max(predictions)
+#     threshold = 0.5
+
+#     confidence_scores = [2 * abs(pred - threshold) for pred in predictions] 
+#     weighted_sum = sum(conf * pred for conf, pred in zip(confidence_scores, predictions))
+#     total_confidence = sum(confidence_scores)
+
+#     aggregated_prediction = weighted_sum / total_confidence if total_confidence > 0 else threshold
 #     print(f"Aggregated Prediction: {aggregated_prediction}")
 
 #     metric.step(torch.tensor(aggregated_prediction).unsqueeze(0), torch.tensor(record_info[1]).unsqueeze(0))
 #     metric.compute_metrics()
 #     print(metric)
 
+def make_prediction(
+    record_id: int, predictions: list[float], record_registry: dict, metric: metrics.Metric
+) -> None:
+    record_info = record_registry.get(record_id)
+    aggregated_prediction = max(predictions)
+    metric.step(torch.tensor(aggregated_prediction).unsqueeze(0), torch.tensor(record_info[1]).unsqueeze(0))
 
+    print(f"Record ID: {record_id} -> predicted: {predictions} over {record_info[1]}")
 
+    metric.compute_metrics()
+    print(metric)
 
 def handle_predictions(prediction_map: PredictionMap, record_registry: dict, threshold: float, metric: metrics.Metric, callback: callable) -> None:
     while True:
@@ -95,7 +90,7 @@ def handle_predictions(prediction_map: PredictionMap, record_registry: dict, thr
         with prediction_map._lock:
             old_entries = [(record_id, entry.predictions)
                            for record_id, entry in prediction_map._data.items()
-                           if current_time - entry.timestamp > threshold]
+                           if current_time - entry.timestamp > threshold or len(entry.predictions) == NUM_CLASSIFIERS]
 
         for record_id, predictions in old_entries:
             prediction_map.remove(record_id)

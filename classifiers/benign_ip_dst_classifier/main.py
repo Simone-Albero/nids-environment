@@ -5,8 +5,8 @@ from modules.live_classifier import LiveClassifier
 
 CONFIG_PATH = "shared/dataset/dataset_properties.ini"
 DATASET_NAME = "nf_unsw_nb15_v2_binary_anonymous"
-MODEL_PATH = "shared/models/unsw/Benign_ip_dst.pt"
-#MODEL_PATH = "shared/models/unsw/Reconnaissance_ip_dst.pt"
+#MODEL_PATH = "shared/models/unsw/Benign_ip_dst.pt"
+MODEL_PATH = "shared/models/unsw/DoS_ip_dst.pt"
 
 TARGET = "IPV4_DST_ADDR"
 
