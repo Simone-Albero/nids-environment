@@ -37,9 +37,10 @@ class LiveClassifier:
             num_heads=self.num_heads,
             num_layers=self.num_layers,
             ff_dim=self.feedforward_dim,
-            dropout=self.dropout_rate
+            dropout=self.dropout_rate,
+            window_size=self.window_size,
         )
-        model.load_state_dict(torch.load(self.model_path, weights_only=True))
+        model.load_model_weights(self.model_path)
         model.eval()
         return model
 

@@ -12,12 +12,13 @@ TARGET = "IPV4_SRC_ADDR"
 
 CATEGORICAL_LEV = 32
 INPUT_SHAPE = 382
-EMBED_DIM = 256
-NUM_HEADS = 2
+
+WINDOW_SIZE = 10
+EMBED_DIM = 128
+NUM_HEADS = 4
 NUM_LAYERS = 4
-DROPOUT = 0.1
-FF_DIM = 128
-WINDOW_SIZE = 8
+DROPOUT = 0.2
+FF_DIM = 256
         
 def read_and_predict() -> None:
     producer = Producer("kafka:9092", lambda v: json.dumps(v).encode("utf-8"))

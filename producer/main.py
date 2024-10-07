@@ -24,8 +24,6 @@ BOUND = 100000000
 def prepare_data():
     prop = properties.NamedDatasetProperties(CONFIG_PATH).get_properties(DATASET_NAME)
     df = pd.read_csv(DATASET_PATH)
-    #df = pd.read_csv(DATASET_PATH, nrows=TEST_LIMIT)
-    #df = df[df['Attack'].isin(["Benign", "Fuzzers", "Exploits", "Reconnaissance"])]
     
     with open(TRAIN_META, "rb") as f:
         min_values, max_values, unique_values = pickle.load(f)
@@ -46,7 +44,7 @@ def prepare_data():
 
     @trans_builder.add_step(order=4)
     def binary_label_conversion(dataset):
-        return utilities.binary_label_conversion_row(dataset, prop)
+        return utilities.binary_benign_label_conversion_row(dataset, prop)
     
     @trans_builder.add_step(order=5)
     def split_data_for_torch(dataset):
@@ -77,7 +75,11 @@ def send_to_queue() -> None:
     try:
         for index, row in df.iterrows():
             connection_tuple = get_connection_tuple(row)
-            X, y = proc.apply(row)
+            
+            try:
+                X, y = proc.apply(row)
+            except Exception as e:
+                print(f"An error occurred: {e}")
             y = int(y)
 
             message = {
