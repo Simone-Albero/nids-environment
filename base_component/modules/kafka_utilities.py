@@ -84,7 +84,9 @@ class Consumer:
         self.consumer = KafkaConsumer(
             bootstrap_servers=self.bootstrap_servers,
             group_id=self.group_id,
-            value_deserializer=value_deserializer
+            value_deserializer=value_deserializer,
+            auto_offset_reset='earliest',
+            enable_auto_commit=True,
         )
 
     def check_kafka_connection(self) -> bool:

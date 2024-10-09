@@ -15,8 +15,9 @@ CONFIG_PATH = "shared/dataset/dataset_properties.ini"
 DATASET_NAME = "nf_unsw_nb15_v2_binary_anonymous"
 
 DATASET_PATH = "shared/dataset/unsw/Custom-Test.csv"
-TRAIN_META = "shared/dataset/unsw/train_meta.pkl"
-TEST_LIMIT = 5000
+TRAIN_META = "shared/dataset/unsw/train_meta_custom.pkl"
+# DATASET_PATH = "shared/dataset/unsw/Balanced-Test.csv"
+# TRAIN_META = "shared/dataset/unsw/train_meta_balanced.pkl"
 
 CATEGORICAL_LEVEL = 32
 BOUND = 100000000
@@ -71,15 +72,13 @@ def send_to_queue() -> None:
     producer.create_topic("queue", 1, 1)
 
     df, proc = prepare_data()
+    print(f"Tot samples: {len(df)}")
 
     try:
         for index, row in df.iterrows():
             connection_tuple = get_connection_tuple(row)
             
-            try:
-                X, y = proc.apply(row)
-            except Exception as e:
-                print(f"An error occurred: {e}")
+            X, y = proc.apply(row)
             y = int(y)
 
             message = {
@@ -88,6 +87,7 @@ def send_to_queue() -> None:
                 "connection_tuple": connection_tuple.to_dict(),
                 "ground_truth": str(y)
             }
+            print(f"Sending message '{index}' to topic 'queue'")
             producer.send("queue", value=message)
             producer.flush()
     
@@ -95,6 +95,10 @@ def send_to_queue() -> None:
         print(f"An error occurred: {e}")
     
     finally:
+        print("Done!")
+        print(f"Sending 'EOS' to topic 'queue'")
+        producer.send("queue", value="EOS")
+        producer.flush()
         producer.close()
 
 if __name__ == "__main__":

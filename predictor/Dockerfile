@@ -2,8 +2,8 @@ FROM base_component:latest
 
 WORKDIR /src
 
-COPY main.py ./
+COPY multiclass.py ./
 
 EXPOSE 6001
 
-CMD ["python", "main.py"]
+CMD ["python", "multiclass.py"]
